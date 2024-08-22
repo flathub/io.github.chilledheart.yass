@@ -1,0 +1,182 @@
+From dd3fe59327081f8d77b76f1af4482bc8ac1776c1 Mon Sep 17 00:00:00 2001
+From: Keeyou <keeyou-cn@outlook.com>
+Date: Thu, 22 Aug 2024 11:57:09 +0800
+Subject: [PATCH] flakpak: fix broken autostart/system proxy feature
+
+---
+ CMakeLists.txt                          |  9 ++++
+ flatpak/dconf-override.patch            | 23 ++++++++++
+ flatpak/io.github.chilledheart.yass.yml | 36 +++++++++++++++
+ src/freedesktop/utils.cpp               | 61 ++++++++++++++++++++++++-
+ src/freedesktop/utils.hpp               |  1 +
+ 5 files changed, 128 insertions(+), 2 deletions(-)
+ create mode 100644 flatpak/dconf-override.patch
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 515ea059..4be8f280 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -145,6 +145,11 @@ if (OFFICIAL_BUILD)
+   add_definitions(-DOFFICIAL_BUILD)
+ endif()
+
++if (FLATPAK_BUILD)
++  list(APPEND YASS_APP_FEATURES "flatpak-build")
++  add_definitions(-DFLATPAK_BUILD)
++endif()
++
+ if(MSVC)
+   # On Windows, prefer cl over gcc if both are available. By default most of
+   # the CMake generators prefer gcc, even on Windows.
+@@ -536,6 +541,10 @@ cmake_dependent_option(
+   INSTALL_FLATHUB_METAINFO "Build with flathub metainfo" OFF
+   "GUI AND LINUX" OFF)
+
++cmake_dependent_option(
++  FLATPAK_BUILD "Build with flatpak support" OFF
++  "GUI AND LINUX" OFF)
++
+ # Dynamic users are supported from version 235
+ # see https://0pointer.net/blog/dynamic-users-with-systemd.html
+ if (USE_OLD_SYSTEMD_SERVICE)
+diff --git a/src/freedesktop/utils.cpp b/src/freedesktop/utils.cpp
+index b118f91d..5f3aed35 100644
+--- a/src/freedesktop/utils.cpp
++++ b/src/freedesktop/utils.cpp
+@@ -20,6 +20,19 @@ using namespace yass;
+
+ static constexpr const char kDefaultAutoStartName[] = "io.github.chilledheart.yass";
+
++#ifdef FLATPAK_BUILD
++static constexpr const std::string_view kAutoStartFileContent =
++    "[Desktop Entry]\n"
++    "Type=Application\n"
++    "Name=yass\n"
++    "Comment=Yet Another Shadow Socket is a lightweight and secure http/socks4/socks5 proxy for embedded devices and "
++    "low end boxes.\n"
++    "Icon=io.github.chilledheart.yass\n"
++    "Exec=/usr/bin/flatpak run --command=yass io.github.chilledheart.yass --background\n"
++    "Terminal=false\n"
++    "Categories=Network;GTK;Utility\n"
++    "X-Flatpak=io.github.chilledheart.yass\n";
++#else
+ static constexpr const std::string_view kAutoStartFileContent =
+     "[Desktop Entry]\n"
+     "Version=1.0\n"
+@@ -31,6 +44,7 @@ static constexpr const std::string_view kAutoStartFileContent =
+     "Exec=\"%s\" --background\n"
+     "Terminal=false\n"
+     "Categories=Network;GTK;Utility\n";
++#endif
+
+ namespace {
+
+@@ -48,6 +62,19 @@ std::string GetConfigDir() {
+   return config_dir;
+ }
+
++// https://github.com/qt/qtbase/blob/7fe1198f6edb40de2299272c7523d85d7486598b/src/corelib/io/qstandardpaths_unix.cpp#L201
++std::string GetDataDir() {
++  const char* data_dir_ptr = getenv("XDG_DATA_HOME");
++  std::string data_dir;
++  // spec says relative paths should be ignored
++  if (data_dir_ptr == nullptr || data_dir_ptr[0] != '/') {
++    data_dir = ExpandUser("~/.local/share");
++  } else {
++    data_dir = data_dir_ptr;
++  }
++  return data_dir;
++}
++
+ std::string GetAutostartDirectory() {
+   return absl::StrCat(GetConfigDir(), "/", "autostart");
+ }
+@@ -61,8 +88,12 @@ bool IsKDE() {
+ // see https://userbase.kde.org/KDE_System_Administration/Environment_Variables
+ std::string GetKDESessionVersion() {
+   DCHECK(IsKDE());
++#ifdef FLATPAK_BUILD
++  return "5"s;
++#else
+   const char* kde_session_ptr = getenv("KDE_SESSION_VERSION");
+   return kde_session_ptr ? std::string(kde_session_ptr) : "5"s;
++#endif
+ }
+ }  // namespace
+
+@@ -89,9 +120,13 @@ void Utils::EnableAutoStart(bool on) {
+     }
+
+     // write to target
++#ifdef FLATPAK_BUILD
++    auto desktop_entry = std::string(kAutoStartFileContent);
++#else
+     std::string executable_path = "yass"s;
+     GetExecutablePath(&executable_path);
+     std::string desktop_entry = absl::StrFormat(kAutoStartFileContent, executable_path);
++#endif
+     if (!WriteFileWithBuffer(autostart_desktop_path, desktop_entry)) {
+       PLOG(WARNING) << "Internal error: unable to create autostart file";
+     }
+@@ -101,7 +136,7 @@ void Utils::EnableAutoStart(bool on) {
+
+   // Update Desktop Database
+   std::string _;
+-  std::vector<std::string> params = {"update-desktop-database"s, ExpandUser("~/.local/share/applications"s)};
++  std::vector<std::string> params = {"update-desktop-database"s, absl::StrCat(GetDataDir(), "/applications"s)};
+   if (ExecuteProcess(params, &_, &_) != 0) {
+     PLOG(WARNING) << "update-desktop-database failed";
+   } else {
+@@ -116,7 +151,7 @@ bool Utils::GetSystemProxy() {
+     if (!QuerySystemProxy_KDE(&enabled, &server_addr, &bypass_addr)) {
+       return false;
+     }
+-    return enabled && server_addr == GetLocalAddr();
++    return enabled && (server_addr == GetLocalAddrKDE() || server_addr == GetLocalAddr());
+   }
+   bool enabled;
+   std::string server_host, server_port, bypass_addr;
+@@ -173,6 +208,28 @@ std::string Utils::GetLocalAddr() {
+   return ss.str();
+ }
+
++std::string Utils::GetLocalAddrKDE() {
++  std::ostringstream ss;
++  auto local_host = absl::GetFlag(FLAGS_local_host);
++  auto local_port = absl::GetFlag(FLAGS_local_port);
++
++  asio::error_code ec;
++  auto addr = asio::ip::make_address(local_host.c_str(), ec);
++  bool host_is_ip_address = !ec;
++  if (host_is_ip_address && addr.is_v6()) {
++    if (addr.is_unspecified()) {
++      local_host = "::1"s;
++    }
++    ss << "http://[" << local_host << "] " << local_port;
++  } else {
++    if (host_is_ip_address && addr.is_unspecified()) {
++      local_host = "127.0.0.1"s;
++    }
++    ss << "http://" << local_host << " " << local_port;
++  }
++  return ss.str();
++}
++
+ bool QuerySystemProxy(bool* enabled, std::string* server_host, std::string* server_port, std::string* bypass_addr) {
+   std::string output, _;
+   std::vector<std::string> params = {"gsettings"s, "get"s, "org.gnome.system.proxy"s, "mode"s};
+diff --git a/src/freedesktop/utils.hpp b/src/freedesktop/utils.hpp
+index 07a8243b..1811eea8 100644
+--- a/src/freedesktop/utils.hpp
++++ b/src/freedesktop/utils.hpp
+@@ -14,6 +14,7 @@ class Utils {
+   static bool GetSystemProxy();
+   static bool SetSystemProxy(bool on);
+   static std::string GetLocalAddr();
++  static std::string GetLocalAddrKDE();
+ };
+
+ bool QuerySystemProxy(bool* enabled, std::string* server_host, std::string* server_port, std::string* bypass_addr);
+--
+2.46.0
+
