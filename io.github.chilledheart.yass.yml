@@ -17,8 +17,6 @@ modules:
   - name: yass
     buildsystem: cmake-ninja
     builddir: true
-    post-install:
-      - install -v -Dm644 ../io.github.chilledheart.yass.metainfo.xml /app/share/metainfo/io.github.chilledheart.yass.metainfo.xml
     config-opts:
       - -DFLATHUB_BUILD=on
       - -DCMAKE_BUILD_TYPE=RelWithDebInfo
@@ -31,8 +29,6 @@ modules:
       - -DCLI=off
       - -DSERVER=off
     sources:
-      - type: file
-        path: io.github.chilledheart.yass.metainfo.xml
       - type: archive
         url: https://github.com/Chilledheart/yass/releases/download/1.13.1/yass-1.13.1.tar.bz2
         sha256: 26015d32a6bdc5bf2670b36c8f5fb68f4a324d577e027bc5eef18ae977e00c9f
