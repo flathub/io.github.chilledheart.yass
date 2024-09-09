@@ -30,7 +30,5 @@ modules:
       - -DSERVER=off
     sources:
       - type: archive
-        url: https://github.com/Chilledheart/yass/releases/download/1.13.1/yass-1.13.1.tar.bz2
-        sha256: 26015d32a6bdc5bf2670b36c8f5fb68f4a324d577e027bc5eef18ae977e00c9f
-      - type: patch
-        path: update-translate-url.patch
+        url: https://github.com/Chilledheart/yass/releases/download/1.13.2/yass-1.13.2.tar.bz2
+        sha256: 1b661be8901c0c8c8bf292b02563ca8abdba503a9f1f7de8ca5f808aff63e8a4
