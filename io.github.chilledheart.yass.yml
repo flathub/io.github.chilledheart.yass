@@ -31,5 +31,5 @@ modules:
       - -DSERVER=off
     sources:
       - type: archive
-        url: https://github.com/Chilledheart/yass/releases/download/1.14.1/yass-1.14.1.tar.zst
-        sha256: 62a327e324a9ff0bc686e51da2f20e19fbb738ae197856e097a436977ef82d47
+        url: https://github.com/Chilledheart/yass/releases/download/1.14.2/yass-1.14.2.tar.zst
+        sha256: 70b25ffc85b6cc58154c38b4799ccf6969022e87a76c79812e0513a5d8406279
