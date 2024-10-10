@@ -33,3 +33,5 @@ modules:
       - type: archive
         url: https://github.com/Chilledheart/yass/releases/download/1.14.3/yass-1.14.3.tar.zst
         sha256: b65cea6fb41a651532dd2d6476a0e2d2e207cf6b5c8573cbbfa450e47b7474fe
+      - type: patch
+        path: translation-qt5.patch
