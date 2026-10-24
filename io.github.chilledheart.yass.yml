@@ -1,6 +1,6 @@
 id: io.github.chilledheart.yass
 runtime: org.kde.Platform
-runtime-version: '6.10'
+runtime-version: '6.11'
 sdk: org.kde.Sdk
 command: yass
 finish-args:
@@ -37,7 +37,5 @@ modules:
       - -DUSE_COMPRESS_DEBUG_SECTIONS=off
     sources:
       - type: archive
-        url: https://github.com/hukeyue/yass/releases/download/1.24.13/yass-1.24.13.tar.zst
-        sha256: 43fd1af631eb67f5edebee89a7085ceacdaa2127076233eb69a3a701e5615d29
-      - type: patch
-        path: gcc16.patch
+        url: https://github.com/hukeyue/yass/releases/download/1.24.14/yass-1.24.14.tar.zst
+        sha256: 358f8c059e1aac88d53a2b42ade9274c085c90088e06983064a4bb76b22f0c4d
